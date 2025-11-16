@@ -1,0 +1,18 @@
+[
+  {
+    "name": "teams",
+    "query": "CREATE TABLE IF NOT EXISTS teams (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    team_name TEXT NOT NULL,\n    join_code TEXT NOT NULL UNIQUE,\n    joined_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),\n    finished_at TEXT,\n    CONSTRAINT uq_team_name UNIQUE (team_name)\n);"
+  },
+  {
+    "name": "emails",
+    "query": "CREATE TABLE IF NOT EXISTS emails (\n    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    category TEXT NOT NULL,\n    subject TEXT,\n    sent_from TEXT,\n    sent_to TEXT,\n    date TEXT,\n    html TEXT\n);"
+  },
+  {
+    "name": "email_pairs",
+    "query": "CREATE TABLE IF NOT EXISTS email_pairs (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    email_1 INTEGER NOT NULL,\n    email_2 INTEGER NOT NULL,\n    CONSTRAINT chk_order CHECK (email_1 < email_2),\n    CONSTRAINT fk_email1 FOREIGN KEY (email_1) REFERENCES emails(id) ON DELETE CASCADE,\n    CONSTRAINT fk_email2 FOREIGN KEY (email_2) REFERENCES emails(id) ON DELETE CASCADE,\n    CONSTRAINT uq_pair UNIQUE (email_1, email_2)\n);"
+  },
+  {
+    "name": "attempts",
+    "query": "CREATE TABLE IF NOT EXISTS attempts (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    team_id INTEGER NOT NULL,\n    pair_id INTEGER NOT NULL,\n    selected_option INTEGER,\n    reasoning TEXT,\n    CONSTRAINT uq_attempt UNIQUE (team_id, pair_id),\n    CONSTRAINT fk_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,\n    CONSTRAINT fk_pair FOREIGN KEY (pair_id) REFERENCES email_pairs(id) ON DELETE CASCADE\n);"
+  }
+]
