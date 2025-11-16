@@ -94,6 +94,8 @@ const login = async ({ joinCode }) => {
         id: row.id,
         teamName: row.team_name,
         joinCode,
+        joinedAt: row.joined_at,
+        finishedAt: row.finished_at,
         isAdmin: false
     })
 

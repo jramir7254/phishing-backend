@@ -5,8 +5,8 @@ const { open } = require('sqlite');
 const tables = require('./tables.json');
 // const codeFiles = require('./code-files.json');
 // const questions = require('./questions.json');
-const legit = require('./legit.json')
-const phishing = require('./phish.json')
+const legit = require('./emails_legit.json')
+const phishing = require('./emails_phishing.json')
 
 const dbPath = path.resolve(__dirname, 'database.db');
 
@@ -365,6 +365,7 @@ WHERE a.team_id = ?
 module.exports = {
     connect,
     get,
+    all,
     run,
     reset,
     getAttemptCount,
