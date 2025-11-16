@@ -19,10 +19,7 @@ jobs:
           node-version: "20"
 
       - name: Install dependencies
-        run: npm install
-
-      - name: Build React app
-        run: npm run build
+        run: npm ci
 
       - name: Test Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
