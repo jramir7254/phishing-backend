@@ -1,5 +1,4 @@
-// const dotenv = require("dotenv");
-// dotenv.config();
+//server.js
 
 const server = require('./src/app')
 

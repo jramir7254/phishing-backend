@@ -1,3 +1,5 @@
+//src/app.js
+
 const express = require('express');
 const cors = require('cors');
 const { reset } = require('./database/sqlite')
@@ -19,7 +21,7 @@ app.use(express.json());
 
 
 // --- Express routes ---
-app.get('/', async (req, res) => {
+app.get('/api', async (req, res) => {
     console.log('call made');
     return res.send('we up')
 });
