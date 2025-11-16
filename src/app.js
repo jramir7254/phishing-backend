@@ -27,10 +27,10 @@ app.get('/api', async (req, res) => {
 });
 
 
-app.use('/auth', authRoutes)
+app.use('/api/auth', authRoutes)
 // app.use('/questions', questionRoutes)
-app.use('/admin', authMiddleware, requireAdmin, adminRoutes)
-app.use('/game', gameRoutes)
+app.use('/api/admin', authMiddleware, requireAdmin, adminRoutes)
+app.use('/api/game', gameRoutes)
 
 
 app.use((err, req, res, next) => {
