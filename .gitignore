@@ -1,0 +1,15 @@
+
+node_modules/
+test/*
+test/
+test
+/test/
+
+
+/migrate
+/archive
+logs/
+
+logger/logs
+# Environment Variables
+.env
