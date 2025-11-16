@@ -30,6 +30,6 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./dist/
+          local-dir: ./
           server-dir: ./phishing-backend/ # adjust if deploying to subdirectory
           dangerous-clean-slate: true
