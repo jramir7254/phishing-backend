@@ -1,6 +1,8 @@
-const { connect } = require('../database/sqlite')
-const { generateAccessCode } = require('../lib/utils')
+const { connect, get } = require('../database/sqlite')
+const { generateAccessCode, snakeToCamel } = require('../lib/utils')
 const { signToken } = require('../lib/middleware')
+const { authMiddleware } = require('../lib/middleware');
+
 // const { DuplicateResourceError, ResourceNotFoundError } = require('@shared/errors')
 
 
@@ -23,6 +25,30 @@ routes.post('/login', async (req, res) => {
     console.debug('auth.login', req.body);
     const accessToken = await login(req.body);
     return res.status(200).json(accessToken);
+});
+
+routes.get('/teams/self', authMiddleware, async (req, res) => {
+    const { id } = req?.team
+    console.debug('auth.team.self', { id });
+
+    if (id < 0) {
+        console.debug('auth.team.self.admin', { id });
+
+        return res.status(200).json({
+            id: -1,
+            isAdmin: true,
+            joinCode: 'D3V'
+        })
+    }
+
+    const team = await get(`
+        SELECT * FROM teams WHERE id = ?
+    `, [id])
+
+    console.debug('auth.team.self', { team });
+
+
+    return res.status(200).json(snakeToCamel(team));
 });
 
 
@@ -60,6 +86,43 @@ const register = async (teamData) => {
         teamName,
         joinCode,
         isAdmin: false,
+    })
+
+    return token
+}
+
+
+
+const getTeam = async ({ joinCode }) => {
+
+
+    if (joinCode === ADMIN_CODE) {
+        console.debug('auth.login.is_admin', joinCode === ADMIN_CODE)
+
+        return signToken({
+            id: -1,
+            teamName: "admin",
+            joinCode,
+            isAdmin: true
+        })
+    }
+
+
+
+    const db = await connect()
+    const row = await db.get('SELECT * FROM teams WHERE join_code = ?', [joinCode])
+
+    if (!row) throw new Error('Team not found')
+
+    console.debug('auth.login.found', row)
+
+    const token = signToken({
+        id: row.id,
+        teamName: row.team_name,
+        joinCode,
+        joinedAt: row.joined_at,
+        finishedAt: row.finished_at,
+        isAdmin: false
     })
 
     return token

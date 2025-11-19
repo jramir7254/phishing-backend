@@ -18,7 +18,7 @@ function signToken(claims) {
 
 
 async function authMiddleware(req, res, next) {
-    console.info("middleware.team")
+    // console.info("middleware.team")
     const authHeader = req.headers['authorization'];
 
     const token = authHeader && authHeader.split(' ')[1];
@@ -53,7 +53,7 @@ async function authMiddleware(req, res, next) {
 
 
 function requireAdmin(req, res, next) {
-    console.info("middleware.admin")
+    // console.info("middleware.admin")
 
     if (!req.team) {
         console.error('middleware.team.missing');

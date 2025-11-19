@@ -2,7 +2,6 @@
 
 const express = require('express');
 const cors = require('cors');
-const { reset } = require('./database/sqlite')
 
 const { requireAdmin, authMiddleware } = require('./lib/middleware');
 
@@ -17,9 +16,6 @@ app.use(express.json());
 
 
 
-
-
-
 // --- Express routes ---
 app.get('/api', async (req, res) => {
     console.log('call made');
@@ -28,7 +24,6 @@ app.get('/api', async (req, res) => {
 
 
 app.use('/api/auth', authRoutes)
-// app.use('/questions', questionRoutes)
 app.use('/api/admin', authMiddleware, requireAdmin, adminRoutes)
 app.use('/api/game', gameRoutes)
 

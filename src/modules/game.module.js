@@ -1,21 +1,13 @@
-// const Database = require('better-sqlite3');
-// const db = new Database('database.db');
-
 const {
-    getAttemptWithEmails,
     getAttemptCount,
     getLatestAttempt,
-    getRandomPair,
     insertAttempt,
     get,
     run,
     all,
-    getTotalPairs,
-    connect,
     getTeamResults
 } = require('../database/sqlite')
-// const { DuplicateResourceError, ResourceNotFoundError } = require('@shared/errors')
-const { generateAccessCode, snakeToCamel } = require('../lib/utils')
+const { snakeToCamel } = require('../lib/utils')
 
 const { authMiddleware } = require('../lib/middleware');
 
@@ -26,57 +18,80 @@ const { Router } = require('express');
 const routes = Router();
 
 
-async function getOrCreateAttemptForTeam(teamId) {
+
+async function getRandomEmail(teamId) {
+    return await get(`
+        SELECT 
+            e.id,
+            e.subject,
+            e.sent_from AS "from",
+            e.sent_to AS "to",
+            e.html
+        FROM emails e
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM attempts a
+            WHERE a.email_id = e.id
+            AND a.team_id = ?
+        )
+        ORDER BY RANDOM()
+        LIMIT 1;
+    `, [teamId])
+}
 
 
-    // 1. Check if team is done
-    // const { count } = await getAttemptCount(teamId);
-    // console.log(`[count]: ${count}`)
-    // if (count >= 20) {
-    //     return { done: true, message: "Team has completed all 20 attempts" };
-    // }
-
+async function newFun(teamId) {
     const { isFinished, count } = await isTeamDone(teamId)
 
     if (isFinished) {
-        return { done: true, message: "Team has completed all 20 attempts" };
+        console.info('team is finished')
 
+        return { done: true, message: "Team has completed all 50 attempts" };
     }
+
+    console.info('team not finished')
+
 
     // 2. Try returning existing unresolved attempt
+    console.info('getting latest attempt through refetch')
     const latest = await getLatestAttempt(teamId);
+    // console.debug('latest', latest)
 
-    if (latest && latest.selected_option == null) {
-        const full = await getAttemptWithEmails(latest.id);
-        return { done: false, count, attempt: full };
+
+    if (latest && latest.selectedOption == null) {
+        console.info('returning existing attempt', { attemptId: latest.attemptId, emailId: latest.email.id })
+        return { done: false, count, attemptId: latest.attemptId, email: latest.email };
     }
 
-    // 3. Otherwise generate a new one
-    const pair = await getRandomPair(teamId);
-
-    if (!pair) {
-        return { done: true, count, message: "No valid unused email pairs remain" };
+    console.info('getting first random email')
+    const randomEmail = await getRandomEmail(teamId);
+    if (!randomEmail) {
+        return { done: true, count, message: "All emails used" };
     }
+
+    console.debug('first randomEmail', { id: randomEmail.id, subject: randomEmail.subject })
+
 
     // Insert it
-    const created = await insertAttempt(teamId, pair.pair_id);
-
-    // Fetch with full email objects
-    const fullAttempt = await getAttemptWithEmails(created.lastID);
+    const attemptId = await insertAttempt(teamId, randomEmail.id);
 
     return {
         done: false,
         count,
-        attempt: fullAttempt
+        attemptId,
+        email: randomEmail
     };
+
 }
+
+
 
 
 
 async function isTeamDone(teamId) {
     const { count } = await getAttemptCount(teamId);
     console.log(`[count]: ${count}`)
-    if (count >= 20) {
+    if (count >= 40) {
         const team = await get('SELECT finished_at AS finishedAt FROM teams WHERE id = ?', [teamId])
 
         if (!team.finishedAt) {
@@ -95,16 +110,15 @@ async function isTeamDone(teamId) {
 
 async function submitAttempt(
     teamId,
-    attemptId,
-    selected_option,
-    reasoning
+    currAttemptId,
+    selectedOption,
 ) {
     // 1. Validate attempt exists & belongs to team
     const attempt = await get(
         `SELECT id, team_id, selected_option
          FROM attempts
          WHERE id = ?`,
-        [attemptId]
+        [currAttemptId]
     );
 
     if (!attempt) {
@@ -114,7 +128,6 @@ async function submitAttempt(
 
     if (attempt.team_id !== teamId) {
         console.warn("Attempt does not belong to this team")
-
         return { error: true, message: "Attempt does not belong to this team" };
     }
 
@@ -128,20 +141,10 @@ async function submitAttempt(
     // 3. Update attempt
     await run(
         `UPDATE attempts
-         SET selected_option = ?, reasoning = ?
+         SET selected_option = ?
          WHERE id = ?`,
-        [selected_option, reasoning, attemptId]
+        [selectedOption, currAttemptId]
     );
-
-    // 4. Get updated full attempt
-    const updated = await getAttemptWithEmails(attemptId);
-
-    // 5. Determine if team is finished
-    // const { count } = await getAttemptCount(teamId);
-
-    // if (count >= 20) {
-    //     return { error: false, updated, next: null, done: true };
-    // }
 
     const { isFinished, count } = await isTeamDone(teamId)
 
@@ -150,22 +153,21 @@ async function submitAttempt(
 
     }
 
-    // 6. Try generating the next attempt
-    const pair = await getRandomPair(teamId);
+    console.info('getting random email after attempt')
+    const randomEmail = await getRandomEmail(teamId);
 
-    if (!pair) {
-        return { error: false, updated, next: null, done: true };
+    console.debug('randomEmail after attempts', { id: randomEmail.id, subject: randomEmail.subject })
+    if (!randomEmail) {
+        return { done: true, count, message: "All emails used" };
     }
 
-    const created = await insertAttempt(teamId, pair.pair_id);
-    const next = await getAttemptWithEmails(created.lastID);
+    const attemptId = await insertAttempt(teamId, randomEmail.id);
 
-    // 7. Return updated attempt + new attempt
     return {
-        error: false,
-        updated,
-        next,
-        done: false
+        done: false,
+        count,
+        attemptId,
+        email: randomEmail
     };
 }
 
@@ -173,8 +175,9 @@ routes.get('/attempt', authMiddleware, async (req, res, next) => {
     console.info('attempt.get')
 
     const { id } = req?.team
-    const result = await getOrCreateAttemptForTeam(id);
+    const result = await newFun(id);
     // console.debug('attempt.get', result)
+    console.log('\n\n')
     res.json(result);
 });
 
@@ -197,7 +200,7 @@ routes.get('/leaderboard', authMiddleware, async (req, res, next) => {
         SELECT
             t.id AS id,
             t.team_name,
-                     t.joined_at,
+            t.joined_at,
             t.finished_at,
             IFNULL(score.correct_count, 0) AS correct_count
         FROM teams t
@@ -206,15 +209,13 @@ routes.get('/leaderboard', authMiddleware, async (req, res, next) => {
                 a.team_id,
                 SUM(
                     CASE
-                        WHEN a.selected_option = e1.id AND e1.category = 'phishing' THEN 1
-                        WHEN a.selected_option = e2.id AND e2.category = 'phishing' THEN 1
+                        WHEN a.selected_option = 'phishing' AND e.category = 'phishing' THEN 1
+                        WHEN a.selected_option = 'legit' AND e.category = 'legit' THEN 1
                         ELSE 0
                     END
                 ) AS correct_count
             FROM attempts a
-            JOIN email_pairs ep ON ep.id = a.pair_id
-            JOIN emails e1 ON e1.id = ep.email_1
-            JOIN emails e2 ON e2.id = ep.email_2
+            JOIN emails e ON e.id = a.email_id   -- 👈 moved inside
             GROUP BY a.team_id
         ) score ON score.team_id = t.id
         ORDER BY t.id;
@@ -230,17 +231,18 @@ routes.get('/leaderboard', authMiddleware, async (req, res, next) => {
 routes.post("/attempt/:attemptId/submit", authMiddleware, async (req, res) => {
     const { id } = req?.team
     const attemptId = Number(req.params.attemptId);
-    const { selection, reasoning } = req.body;
+    const { selection } = req.body;
 
-    console.debug('attempt.submit', { id, attemptId, selection, reasoning })
+    console.debug('attempt.submit', { id, attemptId, selection })
 
 
     const result = await submitAttempt(
         id,
         attemptId,
         selection,
-        reasoning
     );
+    console.log('\n\n')
+
 
     res.json(result);
 });

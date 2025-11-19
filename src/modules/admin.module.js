@@ -30,15 +30,13 @@ routes.get('/teams', async (req, res) => {
                 a.team_id,
                 SUM(
                     CASE
-                        WHEN a.selected_option = e1.id AND e1.category = 'phishing' THEN 1
-                        WHEN a.selected_option = e2.id AND e2.category = 'phishing' THEN 1
+                        WHEN a.selected_option = 'phishing' AND e.category = 'phishing' THEN 1
+                        WHEN a.selected_option = 'legit' AND e.category = 'legit' THEN 1
                         ELSE 0
                     END
                 ) AS correct_count
             FROM attempts a
-            JOIN email_pairs ep ON ep.id = a.pair_id
-            JOIN emails e1 ON e1.id = ep.email_1
-            JOIN emails e2 ON e2.id = ep.email_2
+            JOIN emails e ON e.id = a.email_id   -- 👈 moved inside
             GROUP BY a.team_id
         ) score ON score.team_id = t.id
         ORDER BY t.id;

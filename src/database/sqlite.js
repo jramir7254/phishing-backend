@@ -135,23 +135,6 @@ async function seed() {
     console.info('table.seeded', { table: 'emails', entries: legit.length, category: 'phishing' });
 
 
-    await db.run(`
-INSERT INTO email_pairs (email_1, email_2)
-SELECT
-    CASE WHEN p.id < l.id THEN p.id ELSE l.id END AS email_1,
-    CASE WHEN p.id < l.id THEN l.id ELSE p.id END AS email_2
-FROM emails p
-JOIN emails l
-  ON p.category = 'phishing'
- AND l.category != 'phishing'
- AND p.id != l.id;
-
-    `);
-
-
-    console.info('table.seeded', { table: 'email_pairs', entries: legit.length * phishing.length });
-
-
 
 }
 
@@ -186,177 +169,86 @@ async function getAttemptCount(teamId) {
     );
 }
 
-// Get count of attempts
-async function getTotalPairs(teamId) {
-    return await get(
-        `SELECT COUNT(*) AS count FROM email_pairs`,
-        [teamId]
-    );
-}
+
 
 async function getLatestAttempt(teamId) {
-    return await get(
-        `SELECT * FROM attempts
-         WHERE team_id = ?
-         ORDER BY id DESC
-         LIMIT 1`,
-        [teamId]
-    );
-}
-
-
-async function getRandomPair(teamId) {
-    return await get(
-        `WITH used_emails AS (
-            SELECT ep.email_1 AS email_id
-            FROM attempts a
-            JOIN email_pairs ep ON ep.id = a.pair_id
-            WHERE a.team_id = ?
-            UNION
-            SELECT ep.email_2
-            FROM attempts a
-            JOIN email_pairs ep ON ep.id = a.pair_id
-            WHERE a.team_id = ?
-        )
-        SELECT ep.id AS pair_id, ep.email_1, ep.email_2
-        FROM email_pairs ep
-        WHERE ep.email_1 NOT IN (SELECT email_id FROM used_emails)
-          AND ep.email_2 NOT IN (SELECT email_id FROM used_emails)
-        ORDER BY RANDOM()
-        LIMIT 1`,
-        [teamId, teamId]
-    );
-}
-
-
-
-async function insertAttempt(teamId, pairId) {
-    return await run(
-        `INSERT INTO attempts (team_id, pair_id)
-         VALUES (?, ?)`,
-        [teamId, pairId]
-    );
-}
-
-async function getAttemptWithEmails(attemptId) {
-    const row = await get(
-        `SELECT 
-            a.id AS attempt_id,
-            a.team_id,
-            a.selected_option,
-            a.reasoning,
-
-            ep.id AS pair_id,
-
-            e1.id AS email1_id,
-            e1.category AS email1_category,
-            e1.subject AS email1_subject,
-            e1.sent_from AS email1_sent_from,
-            e1.sent_to AS email1_sent_to,
-            e1.date AS email1_date,
-            e1.html AS email1_html,
-
-            e2.id AS email2_id,
-            e2.category AS email2_category,
-            e2.subject AS email2_subject,
-            e2.sent_from AS email2_sent_from,
-            e2.sent_to AS email2_sent_to,
-            e2.date AS email2_date,
-            e2.html AS email2_html
-
+    const row = await get(`
+        SELECT 
+        a.id, 
+        a.email_id AS emailId, 
+        a.selected_option AS selectedOption,
+        e.subject,
+        e.sent_from AS "from",
+        e.sent_to AS "to",
+        e.html
         FROM attempts a
-        JOIN email_pairs ep ON ep.id = a.pair_id
-        JOIN emails e1 ON e1.id = ep.email_1
-        JOIN emails e2 ON e2.id = ep.email_2
-        WHERE a.id = ?`,
-        [attemptId]
+        JOIN emails e ON e.id = a.email_id
+        WHERE a.team_id = ?
+        ORDER BY a.id DESC
+        LIMIT 1
+    `, [teamId]);
+
+    return !row ? null : {
+        attemptId: row.id,
+        selectedOption: row.selectedOption,
+        email: {
+            id: row.emailId,
+            subject: row.subject,
+            from: row.from,
+            to: row.to,
+            html: row.html
+        }
+    }
+}
+
+
+
+
+
+
+async function insertAttempt(teamId, emailId) {
+    const { lastID } = await run(
+        `INSERT INTO attempts (team_id, email_id)
+         VALUES (?, ?)`,
+        [teamId, emailId]
     );
 
-    return {
-        id: row.attempt_id,
-        teamId: row.team_id,
-        pairId: row.pair_id,
-        selected_option: row.selected_option,
-        reasoning: row.reasoning,
-        email1: {
-            id: row.email1_id,
-            category: row.email1_category,
-            subject: row.email1_subject,
-            from: row.email1_sent_from,
-            to: row.email1_sent_to,
-            date: row.email1_date,
-            html: row.email1_html
-        },
-        email2: {
-            id: row.email2_id,
-            category: row.email2_category,
-            subject: row.email2_subject,
-            from: row.email2_sent_from,
-            to: row.email2_sent_to,
-            date: row.email2_date,
-            html: row.email2_html
-        }
-    };
+    return lastID
 }
 
 async function getTeamResults(teamId) {
-    const rows = await all(
-        `SELECT 
+    const rows = await all(`
+        SELECT 
             a.id AS attempt_id,
             a.team_id,
             a.selected_option,
-            a.reasoning,
 
-            ep.id AS pair_id,
+            e.id AS emailId,
+            e.category AS category,
+            e.subject AS subject,
+            e.sent_from AS "from",
+            e.sent_to AS "to",
+            e.html AS html,
 
-            e1.id AS email1_id,
-            e1.category AS email1_category,
-            e1.subject AS email1_subject,
-            e1.sent_from AS email1_sent_from,
-            e1.sent_to AS email1_sent_to,
-            e1.date AS email1_date,
-            e1.html AS email1_html,
-
-            e2.id AS email2_id,
-            e2.category AS email2_category,
-            e2.subject AS email2_subject,
-            e2.sent_from AS email2_sent_from,
-            e2.sent_to AS email2_sent_to,
-            e2.date AS email2_date,
-            e2.html AS email2_html,
-
-            
-    CASE
-        WHEN a.selected_option = e1.id AND e1.category = 'phishing' THEN 1
-        WHEN a.selected_option = e2.id AND e2.category = 'phishing' THEN 1
-        ELSE 0
-    END AS is_correct
-
-
-        FROM attempts a
-        JOIN email_pairs ep ON ep.id = a.pair_id
-        JOIN emails e1 ON e1.id = ep.email_1
-        JOIN emails e2 ON e2.id = ep.email_2
-WHERE a.team_id = ?
+        CASE
+            WHEN a.selected_option = 'phishing' AND e.category = 'phishing' THEN 1
+            WHEN a.selected_option = 'legit' AND e.category = 'legit' THEN 1
+            ELSE 0
+        END AS is_correct
+            FROM attempts a
+            JOIN emails e ON e.id = a.email_id
+        WHERE a.team_id = ?
 
 `, [teamId]);
 
 
     return rows.map(row => ({
-        id: row.attempt_id,
+        attemptId: row.attempt_id,
         teamId: row.team_id,
-        pairId: row.pair_id,
+        emailId: row.emailId,
+        correctAnswer: row.category,
         isCorrect: row.is_correct,
         selectedOption: row.selected_option,
-        reasoning: row.reasoning,
-        email1: {
-            id: row.email1_id,
-            category: row.email1_category,
-        },
-        email2: {
-            id: row.email2_id,
-            category: row.email2_category,
-        }
     }))
 
 }
@@ -370,9 +262,6 @@ module.exports = {
     reset,
     getAttemptCount,
     getLatestAttempt,
-    getRandomPair,
     insertAttempt,
-    getAttemptWithEmails,
-    getTotalPairs,
     getTeamResults,
 };
