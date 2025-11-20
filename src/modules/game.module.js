@@ -182,6 +182,36 @@ routes.get('/attempt', authMiddleware, async (req, res, next) => {
 });
 
 
+routes.post('/start', authMiddleware, async (req, res, next) => {
+    console.info('attempt.start')
+
+    const { id } = req?.team
+    await run(`
+        UPDATE teams 
+        SET started_at = datetime('now', 'localtime')
+        WHERE id = ?
+    `, [id])
+    // console.debug('attempt.get', result)
+    console.log('\n\n')
+    res.sendStatus(200);
+});
+
+
+routes.post('/end', authMiddleware, async (req, res, next) => {
+    console.info('attempt.start')
+
+    const { id } = req?.team
+    await run(`
+        UPDATE teams 
+        SET finished_at = datetime('now', 'localtime')
+        WHERE id = ?
+    `, [id])
+    // console.debug('attempt.get', result)
+    console.log('\n\n')
+    res.sendStatus(200);
+});
+
+
 routes.get('/results', authMiddleware, async (req, res, next) => {
     console.info('results.get')
     const { id } = req?.team
